@@ -7,21 +7,29 @@ small convenience features.
 
 | Feature | What it does | Options |
 |---|---|---|
-| Magic Armor heavy toggle | Toggle the Magic Armor's "heavy" state (Iron Boots behavior) even when you have rupees | On/off, toggle button, keep protection while heavy |
+| Magic Armor toggles | Heavy mode (Iron Boots behavior even with rupees) and Rupee saver (no protection, no rupee drain) | On/off and button for each, keep protection while heavy |
 | Spinner speed | Multiply the Spinner's movement speed | Enable, speed (100–500%), only while holding R |
 | Spinner water run | Ride the Spinner across water instead of sinking | Enable |
 | Swim speed | Swim faster without the Zora Armor | Enable, speed (100–400%), also with Zora Armor, also as Wolf |
 
 All options are in the in-game **Mods** window → **Useful Functions** panel and are saved to `config.json`.
 
-### Magic Armor heavy toggle
+### Magic Armor toggles
 
-- Hold R and press A (default) to switch heavy mode on/off. A toast shows the new state.
-- Available combos: R + A, L + A, Z + A, L + R + D-pad Down, R + D-pad Down, or Disabled (panel only).
+Two modes, each with its own button combo. A toast shows the new state.
+
+| Mode | Default button | Effect |
+|---|---|---|
+| Heavy mode | R + A | The armor becomes heavy (like Iron Boots) even when you have rupees |
+| Rupee saver | R + X | The armor stops blocking damage and stops draining rupees; Link takes normal damage |
+
+- Available combos: R + A, L + A, Z + A, R + X, L + X, Z + X, L + R + D-pad Down, R + D-pad Down, or Disabled
+  (panel only).
 - The last button of the combo (e.g. A) is hidden from the game until released, so it does not also trigger an action.
 - **Keep protection while heavy**
   - On (default): the armor still blocks damage using rupees while heavy.
   - Off: vanilla rule; the armor stops protecting while heavy.
+  - Rupee saver overrides this setting.
 - Has no effect unless the Magic Armor is equipped.
 
 ### Spinner speed
