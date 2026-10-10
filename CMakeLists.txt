@@ -28,6 +28,7 @@ add_mod(useful_functions
             src/ui_helpers.cpp
             src/features/magic_armor.cpp
             src/features/spinner_speed.cpp
+            src/features/spinner_water.cpp
             src/features/swim_speed.cpp
         MOD_JSON "${CMAKE_CURRENT_BINARY_DIR}/mod.json"
         RES_DIR res

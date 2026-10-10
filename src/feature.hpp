@@ -17,5 +17,6 @@ struct Feature {
 namespace features {
 extern const Feature magicArmor;
 extern const Feature spinnerSpeed;
+extern const Feature spinnerWater;
 extern const Feature swimSpeed;
 }  // namespace features

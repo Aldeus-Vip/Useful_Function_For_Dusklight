@@ -9,6 +9,7 @@ small convenience features.
 |---|---|---|
 | Magic Armor heavy toggle | Toggle the Magic Armor's "heavy" state (Iron Boots behavior) even when you have rupees | On/off, toggle button, keep protection while heavy |
 | Spinner speed | Multiply the Spinner's movement speed | Enable, speed (100–500%), only while holding R |
+| Spinner water run | Ride the Spinner across water instead of sinking | Enable |
 | Swim speed | Swim faster without the Zora Armor | Enable, speed (100–400%), also with Zora Armor, also as Wolf |
 
 All options are in the in-game **Mods** window → **Useful Functions** panel and are saved to `config.json`.
@@ -28,6 +29,14 @@ All options are in the in-game **Mods** window → **Useful Functions** panel an
   ride time stay vanilla.
 - Stacks with Dusklight's built-in **Fast Spinner** cheat (hold R, capped at 60).
 - Very high values may clip through walls.
+
+### Spinner water run
+
+- Keeps the Spinner on the water surface instead of letting it sink (`daSpinner_c::posMove` normally deletes it once
+  it is more than 50 units under water).
+- Never applies to lava.
+- When the Spinner runs out of speed, it stops as usual and Link drops into the water. Combine with Spinner speed or
+  the Fast Spinner cheat to keep going.
 
 ### Swim speed
 
@@ -62,6 +71,7 @@ src/
 └── features/
     ├── magic_armor.cpp
     ├── spinner_speed.cpp
+    ├── spinner_water.cpp
     └── swim_speed.cpp
 ```
 

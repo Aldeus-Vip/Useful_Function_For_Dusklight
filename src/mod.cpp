@@ -22,6 +22,7 @@ namespace {
 const Feature* const kFeatures[] = {
     &features::magicArmor,
     &features::spinnerSpeed,
+    &features::spinnerWater,
     &features::swimSpeed,
 };
 
