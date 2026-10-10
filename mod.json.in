@@ -1,0 +1,7 @@
+{
+  "id": "io.github.aldeus_vip.useful_functions",
+  "name": "Useful Functions",
+  "version": "@PROJECT_VERSION@",
+  "author": "aldeus-vip",
+  "description": "A set of convenience features: Magic Armor heavy toggle, Spinner speed multiplier, swim speed multiplier."
+}

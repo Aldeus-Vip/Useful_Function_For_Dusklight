@@ -1,0 +1,135 @@
+// Magic Armor: toggle the "heavy" state (normally only when rupees run out) with a button combo.
+//
+// Game reference: daAlink_c::checkMagicArmorHeavy() (src/d/actor/d_a_alink.cpp) decides whether
+// the armor acts like Iron Boots. A post-hook forces it to TRUE while the toggle is ON.
+
+#include "../config.hpp"
+#include "../feature.hpp"
+#include "../ui_helpers.hpp"
+
+#include "mods/svc/hook.hpp"
+#include "mods/svc/log.hpp"
+
+#include "d/actor/d_a_alink.h"
+#include "d/d_com_inf_game.h"
+#include "m_Do/m_Do_controller_pad.h"
+
+namespace {
+
+cfg::BoolVar s_heavyOn{"armorHeavyOn", false};
+cfg::IntVar s_hotkey{"armorHeavyHotkey", 1};
+cfg::BoolVar s_keepProtection{"armorKeepProtection", true};
+
+struct Hotkey {
+    const char* label;
+    u32 hold;     // buttons that must be held
+    u32 trigger;  // button that must be pressed this frame
+};
+
+// Index 0 disables the hotkey (toggle from the mod panel only).
+constexpr Hotkey kHotkeys[] = {
+    {"Disabled (panel only)", 0, 0},
+    {"L + R + D-pad Down", PAD_TRIGGER_L | PAD_TRIGGER_R, PAD_BUTTON_DOWN},
+    {"R + D-pad Down", PAD_TRIGGER_R, PAD_BUTTON_DOWN},
+    {"L + D-pad Down", PAD_TRIGGER_L, PAD_BUTTON_DOWN},
+    {"Z + D-pad Down", PAD_TRIGGER_Z, PAD_BUTTON_DOWN},
+    {"R + D-pad Up", PAD_TRIGGER_R, PAD_BUTTON_UP},
+};
+constexpr size_t kHotkeyCount = sizeof(kHotkeys) / sizeof(kHotkeys[0]);
+
+const char* const kHotkeyLabels[] = {
+    kHotkeys[0].label, kHotkeys[1].label, kHotkeys[2].label,
+    kHotkeys[3].label, kHotkeys[4].label, kHotkeys[5].label,
+};
+static_assert(sizeof(kHotkeyLabels) / sizeof(kHotkeyLabels[0]) == kHotkeyCount);
+
+// Header-inline equivalent of daAlink_c::checkMagicArmorWearAbility(), avoiding a call into a
+// game symbol that may be missing from some platforms' link stubs.
+bool isWearingMagicArmor(const daAlink_c* link) {
+    return !link->checkWolf() &&
+           g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getSelectEquip(
+               COLLECT_CLOTHING) == dItemNo_ARMOR_e &&
+           !link->checkNoResetFlg2(daPy_py_c::FLG2_UNK_80000);
+}
+
+// True while daAlink_c::checkMagicArmorNoDamage() runs. In the vanilla rule the armor stops
+// protecting while heavy; with "keep protection" we leave that query alone.
+bool s_inNoDamageCheck = false;
+
+DEFINE_HOOK(&daAlink_c::checkMagicArmorHeavy, CheckMagicArmorHeavy);
+DEFINE_HOOK(&daAlink_c::checkMagicArmorNoDamage, CheckMagicArmorNoDamage);
+
+void onCheckHeavyPost(ModContext*, void* args, void* retval, void*) {
+    if (!s_heavyOn.value || retval == nullptr) {
+        return;
+    }
+    if (s_inNoDamageCheck && s_keepProtection.value) {
+        return;
+    }
+    auto link = mods::arg<const daAlink_c*>(args, 0);
+    if (isWearingMagicArmor(link)) {
+        *static_cast<BOOL*>(retval) = TRUE;
+    }
+}
+
+HookAction onNoDamagePre(ModContext*, void*, void*, void*) {
+    s_inNoDamageCheck = true;
+    return HOOK_CONTINUE;
+}
+
+void onNoDamagePost(ModContext*, void*, void*, void*) {
+    s_inNoDamageCheck = false;
+}
+
+bool hotkeyPressed() {
+    const int64_t index = s_hotkey.value;
+    if (index <= 0 || index >= static_cast<int64_t>(kHotkeyCount)) {
+        return false;
+    }
+    const Hotkey& key = kHotkeys[index];
+    const u32 held = mDoCPd_c::getHold(PAD_1);
+    return (held & key.hold) == key.hold && (mDoCPd_c::getTrig(PAD_1) & key.trigger) != 0;
+}
+
+ModResult initialize() {
+    ModResult result;
+    if ((result = cfg::registerVar(s_heavyOn)) != MOD_OK ||
+        (result = cfg::registerVar(s_hotkey)) != MOD_OK ||
+        (result = cfg::registerVar(s_keepProtection)) != MOD_OK)
+    {
+        return result;
+    }
+    if ((result = mods::hook::add_post<CheckMagicArmorHeavy>(onCheckHeavyPost)) != MOD_OK ||
+        (result = mods::hook::add_pre<CheckMagicArmorNoDamage>(onNoDamagePre)) != MOD_OK ||
+        (result = mods::hook::add_post<CheckMagicArmorNoDamage>(onNoDamagePost)) != MOD_OK)
+    {
+        mods::log::error("magic armor: failed to install hooks ({})", static_cast<int>(result));
+        return result;
+    }
+    return MOD_OK;
+}
+
+void update() {
+    // Only react in-game (a player actor exists), not on the title screen or file select.
+    if (g_dComIfG_gameInfo.play.getPlayer(0) == nullptr || !hotkeyPressed()) {
+        return;
+    }
+    cfg::set(s_heavyOn, !s_heavyOn.value);
+    ui::toast("Magic Armor", s_heavyOn.value ? "Heavy mode: ON" : "Heavy mode: OFF");
+}
+
+void buildUi(UiElementHandle pane) {
+    svc_ui->pane_add_section(mod_ctx, pane, "Magic Armor");
+    ui::addToggle(pane, s_heavyOn, "Heavy mode",
+        "Makes the Magic Armor heavy (like Iron Boots) even when you have rupees. "
+        "Only has an effect while the Magic Armor is equipped.");
+    ui::addDropdown(pane, s_hotkey, "Toggle button", "Button combo that toggles heavy mode in-game.",
+        kHotkeyLabels, kHotkeyCount);
+    ui::addToggle(pane, s_keepProtection, "Keep protection while heavy",
+        "ON: the armor still blocks damage (using rupees) while heavy.<br/>"
+        "OFF: vanilla rule, the armor stops protecting while heavy.");
+}
+
+}  // namespace
+
+const Feature features::magicArmor{"Magic Armor", initialize, update, buildUi};
