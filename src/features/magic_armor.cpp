@@ -17,7 +17,7 @@
 namespace {
 
 cfg::BoolVar s_heavyOn{"armorHeavyOn", false};
-cfg::IntVar s_hotkey{"armorHeavyHotkey", 1};
+cfg::IntVar s_hotkey{"armorHeavyHotkey", 1};  // R + A
 cfg::BoolVar s_keepProtection{"armorKeepProtection", true};
 
 struct Hotkey {
@@ -29,11 +29,11 @@ struct Hotkey {
 // Index 0 disables the hotkey (toggle from the mod panel only).
 constexpr Hotkey kHotkeys[] = {
     {"Disabled (panel only)", 0, 0},
+    {"R + A", PAD_TRIGGER_R, PAD_BUTTON_A},
+    {"L + A", PAD_TRIGGER_L, PAD_BUTTON_A},
+    {"Z + A", PAD_TRIGGER_Z, PAD_BUTTON_A},
     {"L + R + D-pad Down", PAD_TRIGGER_L | PAD_TRIGGER_R, PAD_BUTTON_DOWN},
     {"R + D-pad Down", PAD_TRIGGER_R, PAD_BUTTON_DOWN},
-    {"L + D-pad Down", PAD_TRIGGER_L, PAD_BUTTON_DOWN},
-    {"Z + D-pad Down", PAD_TRIGGER_Z, PAD_BUTTON_DOWN},
-    {"R + D-pad Up", PAD_TRIGGER_R, PAD_BUTTON_UP},
 };
 constexpr size_t kHotkeyCount = sizeof(kHotkeys) / sizeof(kHotkeys[0]);
 
@@ -81,14 +81,42 @@ void onNoDamagePost(ModContext*, void*, void*, void*) {
     s_inNoDamageCheck = false;
 }
 
-bool hotkeyPressed() {
+// Hotkey detection runs right after the game reads the pad (mDoCPd_c::read), so the combo's
+// trigger button can be removed before any game code sees it (otherwise e.g. A would also
+// perform an action). The button stays hidden from the game until it is released, the same way
+// Dusklight suppresses pad buttons for its own menus.
+bool s_togglePending = false;
+u32 s_suppressedButtons = 0;
+
+DEFINE_HOOK(&mDoCPd_c::read, PadRead);
+
+void onPadReadPost(ModContext*, void*, void*, void*) {
+    interface_of_controller_pad& pad = mDoCPd_c::getCpadInfo(PAD_1);
+
+    if (s_suppressedButtons != 0) {
+        if ((pad.mButtonFlags & s_suppressedButtons) == 0) {
+            s_suppressedButtons = 0;
+        } else {
+            pad.mButtonFlags &= ~s_suppressedButtons;
+            pad.mPressedButtonFlags &= ~s_suppressedButtons;
+        }
+    }
+
     const int64_t index = s_hotkey.value;
     if (index <= 0 || index >= static_cast<int64_t>(kHotkeyCount)) {
-        return false;
+        return;
+    }
+    // Only react in-game (a player actor exists), not on the title screen or file select.
+    if (g_dComIfG_gameInfo.play.getPlayer(0) == nullptr) {
+        return;
     }
     const Hotkey& key = kHotkeys[index];
-    const u32 held = mDoCPd_c::getHold(PAD_1);
-    return (held & key.hold) == key.hold && (mDoCPd_c::getTrig(PAD_1) & key.trigger) != 0;
+    if ((pad.mButtonFlags & key.hold) == key.hold && (pad.mPressedButtonFlags & key.trigger) != 0) {
+        s_togglePending = true;
+        s_suppressedButtons |= key.trigger;
+        pad.mButtonFlags &= ~key.trigger;
+        pad.mPressedButtonFlags &= ~key.trigger;
+    }
 }
 
 ModResult initialize() {
@@ -101,7 +129,8 @@ ModResult initialize() {
     }
     if ((result = mods::hook::add_post<CheckMagicArmorHeavy>(onCheckHeavyPost)) != MOD_OK ||
         (result = mods::hook::add_pre<CheckMagicArmorNoDamage>(onNoDamagePre)) != MOD_OK ||
-        (result = mods::hook::add_post<CheckMagicArmorNoDamage>(onNoDamagePost)) != MOD_OK)
+        (result = mods::hook::add_post<CheckMagicArmorNoDamage>(onNoDamagePost)) != MOD_OK ||
+        (result = mods::hook::add_post<PadRead>(onPadReadPost)) != MOD_OK)
     {
         mods::log::error("magic armor: failed to install hooks ({})", static_cast<int>(result));
         return result;
@@ -110,10 +139,10 @@ ModResult initialize() {
 }
 
 void update() {
-    // Only react in-game (a player actor exists), not on the title screen or file select.
-    if (g_dComIfG_gameInfo.play.getPlayer(0) == nullptr || !hotkeyPressed()) {
+    if (!s_togglePending) {
         return;
     }
+    s_togglePending = false;
     cfg::set(s_heavyOn, !s_heavyOn.value);
     ui::toast("Magic Armor", s_heavyOn.value ? "Heavy mode: ON" : "Heavy mode: OFF");
 }
@@ -123,7 +152,7 @@ void buildUi(UiElementHandle pane) {
     ui::addToggle(pane, s_heavyOn, "Heavy mode",
         "Makes the Magic Armor heavy (like Iron Boots) even when you have rupees. "
         "Only has an effect while the Magic Armor is equipped.");
-    ui::addDropdown(pane, s_hotkey, "Toggle button", "Button combo that toggles heavy mode in-game.",
+    ui::addDropdown(pane, s_hotkey, "Toggle button", "Button combo that toggles heavy mode in-game. The last button of the combo is not passed to the game.",
         kHotkeyLabels, kHotkeyCount);
     ui::addToggle(pane, s_keepProtection, "Keep protection while heavy",
         "ON: the armor still blocks damage (using rupees) while heavy.<br/>"

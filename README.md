@@ -16,8 +16,9 @@ All options are in the in-game **Mods** window → **Useful Functions** panel an
 
 ### Magic Armor heavy toggle
 
-- Press the toggle button (default: **L + R + D-pad Down**) to switch heavy mode on/off. A toast shows the new state.
-- Available buttons: L + R + Down, R + Down, L + Down, Z + Down, R + Up, or Disabled (panel only).
+- Hold R and press A (default) to switch heavy mode on/off. A toast shows the new state.
+- Available combos: R + A, L + A, Z + A, L + R + D-pad Down, R + D-pad Down, or Disabled (panel only).
+- The last button of the combo (e.g. A) is hidden from the game until released, so it does not also trigger an action.
 - **Keep protection while heavy**
   - On (default): the armor still blocks damage using rupees while heavy.
   - Off: vanilla rule; the armor stops protecting while heavy.
