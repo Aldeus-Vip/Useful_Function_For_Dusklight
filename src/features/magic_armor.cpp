@@ -6,6 +6,9 @@
 //   all of its rupee drain (the passive drain in daAlink_c::execute and the per-hit cost in
 //   daAlink_c::setDamagePoint). A post-hook forces it to FALSE, so Link takes normal damage and
 //   no rupees are spent.
+// - Breathe while heavy: daAlink_c::checkOxygenTimer() (src/d/actor/d_a_alink_swim.inc) hides the
+//   oxygen gauge for the Zora Armor by calling offOxygenTimer(). A pre-hook does the same while
+//   the Magic Armor is heavy and skips the original.
 
 #include "../config.hpp"
 #include "../feature.hpp"
@@ -25,6 +28,8 @@ namespace {
 cfg::BoolVar s_heavyOn{"armorHeavyOn", false};
 cfg::IntVar s_heavyHotkey{"armorHeavyHotkey", 1};  // R + A
 cfg::BoolVar s_keepProtection{"armorKeepProtection", true};
+
+cfg::BoolVar s_breatheWhileHeavy{"armorBreatheWhileHeavy", true};
 
 cfg::BoolVar s_saverOn{"armorRupeeSaverOn", false};
 cfg::IntVar s_saverHotkey{"armorRupeeSaverHotkey", 6};  // R + X
@@ -111,6 +116,21 @@ void onNoDamagePost(ModContext*, void*, void* retval, void*) {
     }
 }
 
+DEFINE_HOOK(&daAlink_c::checkOxygenTimer, CheckOxygenTimer);
+
+HookAction onCheckOxygenTimerPre(ModContext*, void* args, void*, void*) {
+    if (!s_breatheWhileHeavy.value) {
+        return HOOK_CONTINUE;
+    }
+    auto link = mods::arg<daAlink_c*>(args, 0);
+    // Goes through the heavy hook above, so both forced and vanilla (0 rupees) heavy count.
+    if (!link->checkMagicArmorHeavy()) {
+        return HOOK_CONTINUE;
+    }
+    link->offOxygenTimer();
+    return HOOK_SKIP_ORIGINAL;
+}
+
 // Hotkey detection runs right after the game reads the pad (mDoCPd_c::read), so the combo's
 // trigger button can be removed before any game code sees it (otherwise e.g. A would also
 // perform an action). The button stays hidden from the game until it is released, the same way
@@ -158,6 +178,7 @@ ModResult initialize() {
     if ((result = cfg::registerVar(s_heavyOn)) != MOD_OK ||
         (result = cfg::registerVar(s_heavyHotkey)) != MOD_OK ||
         (result = cfg::registerVar(s_keepProtection)) != MOD_OK ||
+        (result = cfg::registerVar(s_breatheWhileHeavy)) != MOD_OK ||
         (result = cfg::registerVar(s_saverOn)) != MOD_OK ||
         (result = cfg::registerVar(s_saverHotkey)) != MOD_OK)
     {
@@ -166,6 +187,7 @@ ModResult initialize() {
     if ((result = mods::hook::add_post<CheckMagicArmorHeavy>(onCheckHeavyPost)) != MOD_OK ||
         (result = mods::hook::add_pre<CheckMagicArmorNoDamage>(onNoDamagePre)) != MOD_OK ||
         (result = mods::hook::add_post<CheckMagicArmorNoDamage>(onNoDamagePost)) != MOD_OK ||
+        (result = mods::hook::add_pre<CheckOxygenTimer>(onCheckOxygenTimerPre)) != MOD_OK ||
         (result = mods::hook::add_post<PadRead>(onPadReadPost)) != MOD_OK)
     {
         mods::log::error("magic armor: failed to install hooks ({})", static_cast<int>(result));
@@ -199,6 +221,8 @@ void buildUi(UiElementHandle pane) {
     ui::addToggle(pane, s_keepProtection, "Keep protection while heavy",
         "ON: the armor still blocks damage (using rupees) while heavy.<br/>"
         "OFF: vanilla rule, the armor stops protecting while heavy.");
+    ui::addToggle(pane, s_breatheWhileHeavy, "Breathe underwater while heavy",
+        "Hides the oxygen gauge while the Magic Armor is heavy, like the Zora Armor.");
     ui::addToggle(pane, s_saverOn, "Rupee saver",
         "Turns off the armor's damage protection and stops all rupee drain. Link takes normal "
         "damage. Overrides \"Keep protection while heavy\".");

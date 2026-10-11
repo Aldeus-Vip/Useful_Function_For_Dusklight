@@ -7,7 +7,7 @@ small convenience features.
 
 | Feature | What it does | Options |
 |---|---|---|
-| Magic Armor toggles | Heavy mode (Iron Boots behavior even with rupees) and Rupee saver (no protection, no rupee drain) | On/off and button for each, keep protection while heavy |
+| Magic Armor toggles | Heavy mode (Iron Boots behavior even with rupees) and Rupee saver (no protection, no rupee drain) | On/off and button for each, keep protection while heavy, breathe underwater while heavy |
 | Spinner speed | Multiply the Spinner's movement speed | Enable, speed (100–500%), only while holding R |
 | Spinner water run | Ride the Spinner across water instead of sinking | Enable |
 | Swim speed | Swim faster without the Zora Armor | Enable, speed (100–400%), also with Zora Armor, also as Wolf |
@@ -30,6 +30,8 @@ Two modes, each with its own button combo. A toast shows the new state.
   - On (default): the armor still blocks damage using rupees while heavy.
   - Off: vanilla rule; the armor stops protecting while heavy.
   - Rupee saver overrides this setting.
+- **Breathe underwater while heavy** (default: on): hides the oxygen gauge while the armor is heavy, like the Zora
+  Armor. Applies to both the forced heavy mode and the vanilla heavy state (0 rupees).
 - Has no effect unless the Magic Armor is equipped.
 
 ### Spinner speed
