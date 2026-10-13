@@ -25,7 +25,11 @@ Two modes, each with its own button combo. A toast shows the new state.
 
 - Available combos: R + A, L + A, Z + A, R + X, L + X, Z + X, L + R + D-pad Down, R + D-pad Down, or Disabled
   (panel only).
-- The last button of the combo (e.g. A) is hidden from the game until released, so it does not also trigger an action.
+- The buttons only work while the Magic Armor is equipped and Link is not riding Epona (or a boar). Otherwise the
+  combo keeps its normal meaning (e.g. R + A to dismount).
+- When a combo is used, its last button (e.g. A) is hidden from the game until released, so it does not also trigger
+  an action.
+- Heavy mode never applies while riding, so Link is not thrown off the horse.
 - **Keep protection while heavy**
   - On (default): the armor still blocks damage using rupees while heavy.
   - Off: vanilla rule; the armor stops protecting while heavy.

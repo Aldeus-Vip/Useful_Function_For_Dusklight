@@ -99,7 +99,8 @@ void onCheckHeavyPost(ModContext*, void* args, void* retval, void*) {
         return;
     }
     auto link = mods::arg<const daAlink_c*>(args, 0);
-    if (isWearingMagicArmor(link)) {
+    // Never force heavy on horseback (or on a boar): it throws Link off.
+    if (isWearingMagicArmor(link) && !link->checkReinRide()) {
         *static_cast<BOOL*>(retval) = TRUE;
     }
 }
@@ -151,8 +152,11 @@ void onPadReadPost(ModContext*, void*, void*, void*) {
         }
     }
 
-    // Only react in-game (a player actor exists), not on the title screen or file select.
-    if (g_dComIfG_gameInfo.play.getPlayer(0) == nullptr) {
+    // Only react while Link wears the Magic Armor and is not riding Epona (or a boar), so the
+    // combo keeps its normal meaning everywhere else (e.g. R + A dismounts from the horse). This
+    // also excludes the title screen and file select, where there is no player actor.
+    auto link = static_cast<daAlink_c*>(g_dComIfG_gameInfo.play.getPlayer(0));
+    if (link == nullptr || !isWearingMagicArmor(link) || link->checkReinRide()) {
         return;
     }
     // Match every toggle against the unmodified input before suppressing anything.
@@ -215,8 +219,8 @@ void buildUi(UiElementHandle pane) {
         "Makes the Magic Armor heavy (like Iron Boots) even when you have rupees. "
         "Only has an effect while the Magic Armor is equipped.");
     ui::addDropdown(pane, s_heavyHotkey, "Heavy mode button",
-        "Button combo that toggles heavy mode in-game. The last button of the combo is not passed "
-        "to the game.",
+        "Button combo that toggles heavy mode in-game. Only works while the Magic Armor is "
+        "equipped and Link is not riding. The last button of the combo is not passed to the game.",
         kHotkeyLabels, kHotkeyCount);
     ui::addToggle(pane, s_keepProtection, "Keep protection while heavy",
         "ON: the armor still blocks damage (using rupees) while heavy.<br/>"
@@ -227,8 +231,8 @@ void buildUi(UiElementHandle pane) {
         "Turns off the armor's damage protection and stops all rupee drain. Link takes normal "
         "damage. Overrides \"Keep protection while heavy\".");
     ui::addDropdown(pane, s_saverHotkey, "Rupee saver button",
-        "Button combo that toggles the rupee saver in-game. The last button of the combo is not "
-        "passed to the game.",
+        "Button combo that toggles the rupee saver in-game. Only works while the Magic Armor is "
+        "equipped and Link is not riding. The last button of the combo is not passed to the game.",
         kHotkeyLabels, kHotkeyCount);
 }
 
