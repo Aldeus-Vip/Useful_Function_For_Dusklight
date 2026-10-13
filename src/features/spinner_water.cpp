@@ -46,8 +46,10 @@ void onPosMovePost(ModContext*, void* args, void* retval, void*) {
     }
     s_spinner = nullptr;
 
+    // Ground contact is not excluded: on a gentle slope into water the Spinner stays grounded on
+    // the lake bed while it goes under, and vanilla deletes it once it is 50 units deep.
     dBgS_LinkAcch& acch = spinner->mAcch;
-    if (!acch.ChkWaterHit() || acch.ChkGroundHit()) {
+    if (!acch.ChkWaterHit()) {
         return;
     }
     if (g_dComIfG_gameInfo.play.mBgs.GetPolyAtt0(acch.m_wtr) == kLavaAttribute) {
