@@ -9,6 +9,8 @@
 // - Breathe while heavy: daAlink_c::checkOxygenTimer() (src/d/actor/d_a_alink_swim.inc) hides the
 //   oxygen gauge for the Zora Armor by calling offOxygenTimer(). A pre-hook does the same while
 //   the Magic Armor is heavy and skips the original.
+// - Look and sound: the mod drives the armor's brk animation and sounds from the actual state
+//   instead of the rupee count (see "Look and sound" below).
 
 #include "../config.hpp"
 #include "../feature.hpp"
@@ -20,6 +22,7 @@
 #include "d/actor/d_a_alink.h"
 #include "d/d_com_inf_game.h"
 #include "m_Do/m_Do_controller_pad.h"
+#include "Z2AudioLib/Z2SeMgr.h"
 
 #include <cstdio>
 
@@ -30,6 +33,8 @@ cfg::IntVar s_heavyHotkey{"armorHeavyHotkey", 1};  // R + A
 cfg::BoolVar s_keepProtection{"armorKeepProtection", true};
 
 cfg::BoolVar s_breatheWhileHeavy{"armorBreatheWhileHeavy", true};
+
+cfg::BoolVar s_showToast{"armorShowToast", false};
 
 cfg::BoolVar s_saverOn{"armorRupeeSaverOn", false};
 cfg::IntVar s_saverHotkey{"armorRupeeSaverHotkey", 6};  // R + X
@@ -132,6 +137,178 @@ HookAction onCheckOxygenTimerPre(ModContext*, void* args, void*, void*) {
     return HOOK_SKIP_ORIGINAL;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Look and sound
+//
+// Vanilla (daAlink_c::execute) switches the armor's brk animation by rupee count, using
+// field_0x2fd7 as "current brk": rupees 0 -> power_down (dark) + TURNOFF sound, rupees back ->
+// power_up_a (glow while recovering, last frame = normal look) + RECOVER sound.
+//
+// We take this over and derive it from the real state instead:
+//   heavy                 -> dark (power_down)
+//   protected (no damage) -> power_up_a looped back and forth, so the recover glow stays on
+//   otherwise             -> normal look (last frame of power_up_a)
+// Sounds play on changes: heavy ON / protection OFF -> TURNOFF, heavy OFF / protection ON ->
+// RECOVER.
+//
+// Interplay with the vanilla block:
+// - Before execute we keep field_0x2fd7 in line with the rupee count, so the vanilla block only
+//   fires when the rupee count itself crosses 0 (instead of every frame against our look).
+// - setMagicArmorBrk is post-hooked to know which brk is really active, whoever set it.
+// - While we track the armor, its two sounds are only allowed from us (no double sounds when
+//   the vanilla block does fire).
+
+enum class ArmorLook { Normal, Glow, Dark };
+
+constexpr int kBrkPowerDown = 0;
+constexpr int kBrkPowerUp = 1;
+// Z2CreatureLink link states the vanilla code sets for the armor (affects Link's sounds).
+constexpr u8 kLinkStateArmorOff = 5;
+constexpr u8 kLinkStateArmorOn = 4;
+
+struct LookState {
+    bool tracking = false;
+    int activeBrk = -1;         // last setMagicArmorBrk status, from the hook below
+    bool playingOwnSound = false;
+    J3DModel* model = nullptr;  // detects the game rebuilding Link's model (and its brk)
+    bool heavy = false;
+    bool protectedNow = false;
+    ArmorLook look = ArmorLook::Normal;
+    int glowFrame = 0;
+};
+LookState s_look;
+
+void setBrkFrame(daAlink_c* link, f32 frame) {
+    link->mMagicArmorBodyBrk->setFrame(frame);
+    link->mMagicArmorHeadBrk->setFrame(frame);
+}
+
+f32 brkFrameMax(daAlink_c* link) {
+    return static_cast<f32>(link->mMagicArmorBodyBrk->getFrameMax());
+}
+
+// animate: play the transition (dark fading in / recover glow) instead of jumping to the end.
+void applyLook(daAlink_c* link, ArmorLook look, bool animate) {
+    switch (look) {
+    case ArmorLook::Dark:
+        link->setMagicArmorBrk(kBrkPowerDown);
+        if (!animate) {
+            setBrkFrame(link, brkFrameMax(link));
+        }
+        break;
+    case ArmorLook::Glow:
+        if (s_look.activeBrk != kBrkPowerUp) {
+            link->setMagicArmorBrk(kBrkPowerUp);
+        }
+        s_look.glowFrame = 0;
+        break;
+    case ArmorLook::Normal:
+        if (s_look.activeBrk != kBrkPowerUp || (s_look.look == ArmorLook::Dark && animate)) {
+            link->setMagicArmorBrk(kBrkPowerUp);  // plays the recover glow once, ends normal
+        }
+        if (!animate || s_look.look == ArmorLook::Glow) {
+            setBrkFrame(link, brkFrameMax(link));
+        }
+        break;
+    }
+    s_look.look = look;
+}
+
+// Back-and-forth over power_up_a so the glow loops without jumping.
+void updateGlow(daAlink_c* link) {
+    const int max = static_cast<int>(brkFrameMax(link));
+    if (max <= 0) {
+        return;
+    }
+    const int period = max * 2;
+    s_look.glowFrame = (s_look.glowFrame + 1) % period;
+    const int frame = s_look.glowFrame <= max ? s_look.glowFrame : period - s_look.glowFrame;
+    setBrkFrame(link, static_cast<f32>(frame));
+}
+
+void playArmorSound(daAlink_c* link, bool powerOn) {
+    s_look.playingOwnSound = true;
+    link->seStartOnlyReverb(powerOn ? Z2SE_AL_M_ARMER_RECOVER : Z2SE_AL_M_ARMER_TURNOFF);
+    s_look.playingOwnSound = false;
+}
+
+DEFINE_HOOK(&daAlink_c::setMagicArmorBrk, SetMagicArmorBrk);
+
+void onSetMagicArmorBrkPost(ModContext*, void* args, void*, void*) {
+    s_look.activeBrk = mods::arg<int>(args, 1);
+}
+
+// Virtual, so hooked by name.
+DEFINE_HOOK_SYMBOL("daAlink_c::seStartOnlyReverb", void(daAlink_c*, u32), SeStartOnlyReverb);
+
+HookAction onSeStartOnlyReverbPre(ModContext*, void* args, void*, void*) {
+    const u32 sound = mods::arg<u32>(args, 1);
+    if (s_look.tracking && !s_look.playingOwnSound &&
+        (sound == Z2SE_AL_M_ARMER_RECOVER || sound == Z2SE_AL_M_ARMER_TURNOFF))
+    {
+        return HOOK_SKIP_ORIGINAL;
+    }
+    return HOOK_CONTINUE;
+}
+
+DEFINE_HOOK(&daAlink_c::execute, LinkExecute);
+
+HookAction onLinkExecutePre(ModContext*, void* args, void*, void*) {
+    auto link = mods::arg<daAlink_c*>(args, 0);
+    if (s_look.tracking && isWearingMagicArmor(link)) {
+        const u16 rupees = g_dComIfG_gameInfo.info.getPlayer().getPlayerStatusA().getRupee();
+        link->field_0x2fd7 = rupees != 0 ? kBrkPowerUp : kBrkPowerDown;
+    }
+    return HOOK_CONTINUE;
+}
+
+void onLinkExecutePost(ModContext*, void* args, void*, void*) {
+    auto link = mods::arg<daAlink_c*>(args, 0);
+    if (!isWearingMagicArmor(link) || link->mClothesChangeWaitTimer != 0 ||
+        link->mMagicArmorBodyBrk == nullptr || link->mMagicArmorHeadBrk == nullptr)
+    {
+        s_look.tracking = false;
+        return;
+    }
+
+    const bool heavy = link->checkMagicArmorHeavy();
+    const bool protectedNow = link->checkMagicArmorNoDamage();
+    const ArmorLook look = heavy ? ArmorLook::Dark : protectedNow ? ArmorLook::Glow : ArmorLook::Normal;
+
+    if (!s_look.tracking || s_look.model != link->mpLinkModel) {
+        // Just put the armor on, or the game rebuilt the model: match silently.
+        s_look.tracking = true;
+        s_look.model = link->mpLinkModel;
+        s_look.heavy = heavy;
+        s_look.protectedNow = protectedNow;
+        applyLook(link, look, false);
+        link->mZ2Link.setLinkState(heavy ? kLinkStateArmorOff : kLinkStateArmorOn);
+    } else if (heavy != s_look.heavy || protectedNow != s_look.protectedNow) {
+        bool powerOn;
+        if (heavy != s_look.heavy) {
+            powerOn = !heavy;
+        } else {
+            powerOn = protectedNow;
+        }
+        playArmorSound(link, powerOn);
+        link->mZ2Link.setLinkState(heavy ? kLinkStateArmorOff : kLinkStateArmorOn);
+        s_look.heavy = heavy;
+        s_look.protectedNow = protectedNow;
+        if (look != s_look.look) {
+            applyLook(link, look, true);
+        }
+    } else if (look == ArmorLook::Dark && s_look.activeBrk != kBrkPowerDown) {
+        // The vanilla block switched the brk under us (rupee count crossed 0): put it back.
+        applyLook(link, look, false);
+    } else if (look != ArmorLook::Dark && s_look.activeBrk != kBrkPowerUp) {
+        applyLook(link, look, false);
+    }
+
+    if (s_look.look == ArmorLook::Glow) {
+        updateGlow(link);
+    }
+}
+
 // Hotkey detection runs right after the game reads the pad (mDoCPd_c::read), so the combo's
 // trigger button can be removed before any game code sees it (otherwise e.g. A would also
 // perform an action). The button stays hidden from the game until it is released, the same way
@@ -183,6 +360,7 @@ ModResult initialize() {
         (result = cfg::registerVar(s_heavyHotkey)) != MOD_OK ||
         (result = cfg::registerVar(s_keepProtection)) != MOD_OK ||
         (result = cfg::registerVar(s_breatheWhileHeavy)) != MOD_OK ||
+        (result = cfg::registerVar(s_showToast)) != MOD_OK ||
         (result = cfg::registerVar(s_saverOn)) != MOD_OK ||
         (result = cfg::registerVar(s_saverHotkey)) != MOD_OK)
     {
@@ -192,6 +370,10 @@ ModResult initialize() {
         (result = mods::hook::add_pre<CheckMagicArmorNoDamage>(onNoDamagePre)) != MOD_OK ||
         (result = mods::hook::add_post<CheckMagicArmorNoDamage>(onNoDamagePost)) != MOD_OK ||
         (result = mods::hook::add_pre<CheckOxygenTimer>(onCheckOxygenTimerPre)) != MOD_OK ||
+        (result = mods::hook::add_post<SetMagicArmorBrk>(onSetMagicArmorBrkPost)) != MOD_OK ||
+        (result = mods::hook::add_pre<SeStartOnlyReverb>(onSeStartOnlyReverbPre)) != MOD_OK ||
+        (result = mods::hook::add_pre<LinkExecute>(onLinkExecutePre)) != MOD_OK ||
+        (result = mods::hook::add_post<LinkExecute>(onLinkExecutePost)) != MOD_OK ||
         (result = mods::hook::add_post<PadRead>(onPadReadPost)) != MOD_OK)
     {
         mods::log::error("magic armor: failed to install hooks ({})", static_cast<int>(result));
@@ -207,6 +389,9 @@ void update() {
         }
         toggle.pending = false;
         cfg::set(toggle.on, !toggle.on.value);
+        if (!s_showToast.value) {
+            continue;  // the armor's look and sound already show the change
+        }
         char body[64];
         snprintf(body, sizeof(body), "%s: %s", toggle.name, toggle.on.value ? "ON" : "OFF");
         ui::toast("Magic Armor", body);
@@ -225,6 +410,8 @@ void buildUi(UiElementHandle pane) {
     ui::addToggle(pane, s_keepProtection, "Keep protection while heavy",
         "ON: the armor still blocks damage (using rupees) while heavy.<br/>"
         "OFF: vanilla rule, the armor stops protecting while heavy.");
+    ui::addToggle(pane, s_showToast, "Show notifications",
+        "Show a notification when a mode is toggled. The armor's look and sound change either way.");
     ui::addToggle(pane, s_breatheWhileHeavy, "Breathe underwater while heavy",
         "Hides the oxygen gauge while the Magic Armor is heavy, like the Zora Armor.");
     ui::addToggle(pane, s_saverOn, "Rupee saver",

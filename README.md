@@ -16,7 +16,16 @@ All options are in the in-game **Mods** window → **Useful Functions** panel an
 
 ### Magic Armor toggles
 
-Two modes, each with its own button combo. A toast shows the new state.
+Two modes, each with its own button combo. The armor's look and sound show the current state:
+
+| State | Look | Sound when entering |
+|---|---|---|
+| Heavy | Dark, like when rupees run out | Power-down sound |
+| Protected (blocks damage) | Recover glow, shown continuously | Recover sound |
+| Neither (e.g. Rupee saver on) | Normal armor | Power-down sound |
+
+Leaving heavy mode plays the recover sound. "Show notifications" (default: off) additionally shows a toast when a mode
+is toggled.
 
 | Mode | Default button | Effect |
 |---|---|---|
