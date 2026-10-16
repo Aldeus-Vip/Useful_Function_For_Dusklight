@@ -30,6 +30,7 @@ add_mod(useful_functions
             src/features/spinner_speed.cpp
             src/features/spinner_water.cpp
             src/features/swim_speed.cpp
+            src/features/epona_spurs.cpp
         MOD_JSON "${CMAKE_CURRENT_BINARY_DIR}/mod.json"
         RES_DIR res
 )

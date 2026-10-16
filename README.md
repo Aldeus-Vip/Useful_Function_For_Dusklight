@@ -11,6 +11,7 @@ small convenience features.
 | Spinner speed | Multiply the Spinner's movement speed | Enable, speed (100–500%), only while holding R |
 | Spinner water run | Ride the Spinner across water instead of sinking | Enable |
 | Swim speed | Swim faster without the Zora Armor | Enable, speed (100–400%), also with Zora Armor, also as Wolf |
+| Epona infinite spurs | Epona's spurs (dashes) never run out | Enable |
 
 All options are in the in-game **Mods** window → **Useful Functions** panel and are saved to `config.json`.
 
@@ -68,6 +69,11 @@ is toggled.
 - Not applied while walking underwater with the Iron Boots or a heavy Magic Armor.
 - The Zora Armor is already fast, so it is excluded by default (configurable).
 
+### Epona infinite spurs
+
+- Keeps Epona's spur count at 6 (`daHorse_c::setLashCnt`), so you can dash as often as you like and the spur meter
+  always stays full.
+
 ## Building
 
 ```sh
@@ -96,7 +102,8 @@ src/
     ├── magic_armor.cpp
     ├── spinner_speed.cpp
     ├── spinner_water.cpp
-    └── swim_speed.cpp
+    ├── swim_speed.cpp
+    └── epona_spurs.cpp
 ```
 
 To add a new feature:

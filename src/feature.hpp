@@ -19,4 +19,5 @@ extern const Feature magicArmor;
 extern const Feature spinnerSpeed;
 extern const Feature spinnerWater;
 extern const Feature swimSpeed;
+extern const Feature eponaSpurs;
 }  // namespace features

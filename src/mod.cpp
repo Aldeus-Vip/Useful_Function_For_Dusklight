@@ -24,6 +24,7 @@ const Feature* const kFeatures[] = {
     &features::spinnerSpeed,
     &features::spinnerWater,
     &features::swimSpeed,
+    &features::eponaSpurs,
 };
 
 ModResult buildPanel(ModContext*, UiElementHandle panel, void*, ModError*) {
